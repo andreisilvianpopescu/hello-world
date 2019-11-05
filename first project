@@ -1,0 +1,387 @@
+#5/11/2019
+
+from datetime import datetime
+import pygal
+import os
+import re
+
+
+class Stoc:
+    """
+    Aceasta este clasa Stoc.
+
+    La crearea unui nou obiect in clasa "Stoc" se vor introduce parametrii functiei __init__:
+
+        Args:
+        * denp - denumirea produsului
+        * categ - categoria din care face parte produsul
+        * um - unitatea de masura, care este default = buc
+        * sold - soldul, care este default = 0
+
+        Returns:
+        "Obiectul a fost creat."
+    """
+
+    lista_produse = []
+    dictionar_categorii = {}
+
+    def __init__(self, denp, categ, um='Buc', sold=0, lim_min=0):
+        self.expeditor = input("Intrduceti adresa de email de pe care se vor transmite mesaje: \n")
+        self.parola = input("Intrduceti parola pentru adresa de email: \n")
+        self.destinatar = input("Intrduceti adresa de email catre care se vor transmite mesaje: \n")
+        self.lim_min = lim_min
+        self.denp = denp
+        self.categ = categ
+        self.um = um
+        self.sold = sold
+        self.miscari = {}
+        self.lista_produse = Stoc.lista_produse
+        self.dictionar_categorii = Stoc.dictionar_categorii
+        self.lista_produse.append(self.denp)
+        if self.categ in self.dictionar_categorii.keys():
+            self.dictionar_categorii[self.categ] += [self.denp]
+        else:
+            self.dictionar_categorii[self.categ] = [self.denp]
+        print("Obiectul a fost creat.")
+
+    def intrari(self, cant, pret_intrare=0, data=str(datetime.now().strftime('%Y%m%d'))):
+        """
+        Aceasta functie creaza o noua intrare.
+
+        Args:
+        * cant - cantitatea produsului
+        * data - data crearii intrari default
+
+        Returns:
+        "Intrarea a fost creata."
+        """
+        self.pret_intrare = int(pret_intrare)
+        self.cant = cant
+        self.date = data
+        if self.miscari.keys():
+            cheie = max(self.miscari.keys()) + 1
+        else:
+            cheie = 1
+        self.miscari[cheie] = (self.date, self.cant, 0, self.pret_intrare)
+        self.sold += self.cant
+        pret_stoc = 0
+        cant_prod = 0
+        for intrare in self.miscari:
+            pret_stoc += self.miscari[intrare][3] * self.miscari[intrare][1]
+            cant_prod += self.miscari[intrare][1]
+        self.pret_iesire = float(f"{pret_stoc / cant_prod :.2f}")
+        print("Intrarea a fost creata.")
+
+    def iesiri(self, cant, data=str(datetime.now().strftime('%Y%m%d'))):
+        """
+        Aceasta functie creaza o noua iesire.
+
+        Args:
+        * cant - cantitatea produsului
+        * data - data crearii intrari default
+
+        Returns:
+        "Iesirea a fost creata."
+        """
+        self.cant = cant
+        self.data = data
+        if self.miscari.keys():
+            cheie = max(self.miscari.keys()) + 1
+        else:
+            cheie = 1
+        self.miscari[cheie] = (self.data, 0, self.cant, self.pret_iesire)
+        self.sold -= self.cant
+        if self.sold < self.lim_min:
+            self.trimite_email_avertizare()
+            print("Limita minima a fost depasita. \
+Un email de avertizare a fost trimis catre {}".format(self.destinatar))
+        print("Iesirea a fost creata")
+
+    def fisap(self):
+        """
+        Aceasta functie afiseaza fisa produsului.
+
+        Returns:
+        "Fisa produsului."
+        """
+        corp = '*-* ' * 10 + "\nFisa produsului {0} [{1}]\n".format(self.denp, self.um) + \
+               '-' * 50 + '\n Nrc   Data   Intrare   Iesire   Pret intrare\n' + '-' * 50
+
+        for cheie in self.miscari:
+            corp += "\n" + str(cheie).rjust(3) + \
+                    str(self.miscari[cheie][0]).rjust(10) + \
+                    str(self.miscari[cheie][1]).rjust(8) + \
+                    str(self.miscari[cheie][2]).rjust(8) + \
+                    str(self.miscari[cheie][3]).rjust(8)
+        corp += "\n" + '-' * 30 + '\nStocul final \t\t\t {0}\n'.format(self.sold) + \
+                "\nPret iesire \t\t\t {}\n".format(self.pret_iesire) + '*-* ' * 10
+        print(corp)
+        return corp
+
+    def grafic_total(self, denumireprodus, data1=str(datetime.now().strftime('%Y%m%d')),
+                     data2=str(datetime.now().strftime('%Y%m%d'))):
+        """
+                Aceasta functie creaza o proiectie grafica a intrarilor si iesirilor intr-o
+        anumita perioada, pentru un anumit produs.
+
+                Args:
+                * denp
+                * data1 - data de inceput
+                * data2 - data de sfarsit
+
+                Returns:
+                O proiectie grafica a intrarilor si iesirilor intr-o anumita perioada, pentru un anumit produs.
+                """
+        var_i = 0
+        var_e = 0
+        var_nre = 0
+        var_nri = 0
+        var_data = data1.format('%Y/%m/%d') + " - " + data2
+        for produs in Stoc.lista_produse:
+            if produs == denumireprodus:
+                for miscare in self.miscari:
+                    if data1 <= self.miscari[miscare][0] <= data2:
+                        var_i += self.miscari[miscare][1]
+                        if self.miscari[miscare][1] > 0:
+                            var_nri += 1
+                        if self.miscari[miscare][2] > 0:
+                            var_nre += 1
+                        var_e += self.miscari[miscare][2]
+        grafic = pygal.StackedBar()
+        grafic.add('Intrari', (var_i, 0, var_nri))
+        grafic.add('Iesiri', (var_e, 0, var_nre))
+        grafic.x_labels = (var_data, "", "nr intrari/nr iesiri")
+        grafic.render_to_file(
+            'Grafic3 {} Intrari - Iesiri {}.svg'.format(denumireprodus, var_data))
+        user_paths = os.getcwd()
+        print("Ati creat un grafic al produsului \"{}\"  din perioada {} - {} in urmatoarea locatie:\n{}".
+              format(denumireprodus, data1, data2, user_paths))
+
+    def graficel(self, denprod, data1=str(datetime.now().strftime('%Y%m%d')),
+           data2=str(datetime.now().strftime('%Y%m%d'))):
+        """
+        Aceasta functie creaza o proiectie grafica a intrarilor si iesirilor intr-o
+anumita perioada, pentru un anumit produs.
+
+        Args:
+        * denp
+        * data1 - data de inceput
+        * data2 - data de sfarsit
+
+        Returns:
+        O proiectie grafica a intrarilor si iesirilor intr-o anumita perioada, pentru un anumit produs.
+        """
+        var_i = []
+        var_e = []
+        var_data = []
+        for produs in Stoc.lista_produse:
+            if produs == denprod:
+                for miscare in self.miscari:
+                    if data1 <= self.miscari[miscare][0] <= data2:
+                        var_i.append(self.miscari[miscare][1])
+                        var_e.append(self.miscari[miscare][2])
+                        var_data.append(self.miscari[miscare][0])
+
+        grafic = pygal.StackedBar()
+        grafic.add('Intrari', var_i)
+        grafic.add('Iesiri', var_e)
+        grafic.x_labels = var_data
+        var_data = sorted(var_data)
+        grafic.render_to_file('Grafic Intrari - Iesiri {} {}-{}.svg'.
+                              format(denprod, var_data[1], var_data[len(var_data) - 1]))
+
+    def trimite_email_avertizare(self):
+        """
+        Aceasta functie trimite un email de avertizare catre
+
+        Returns:
+
+            'Mesaj expediat cu succes!'
+             sau
+            'Mesajul nu a putut fi expediat!' - daca apare o eroare
+        """
+        import smtplib
+        from email.message import EmailMessage
+
+        subject = "Limita minima depasita!"
+        body = """
+Limita minima de {0} {1} pentru produsul {2} a fost depasita!
+        
+In data de {3}, a fost inregistrata o iesire de {4} {1} pentru produsul {2}, care a rezultat in depasirea \
+limiteai stabilite de {0} {1}.  
+        
+        """.format(self.lim_min, self.um, self.denp, self.data, self.cant)
+
+        mesaj = EmailMessage()
+        mesaj.set_content("""\
+From: %s
+To: %s
+Subject: %s
+        
+%s
+""" % (self.expeditor, self.destinatar, subject, body))
+
+        mesaj['Subject'] = subject
+        mesaj['From'] = self.expeditor
+        mesaj['To'] = self.destinatar
+
+        try:
+            server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
+            server.ehlo()
+            server.login(self.expeditor, self.parola)
+            server.send_message(mesaj)
+            server.quit()
+            print("Mesaj expediat cu succes!")
+        except:
+            print("Mesajul nu a putut fi expediat!")
+
+    def trimite_email_info(self):
+        """
+        Aceasta functie trimite un email catre adresa setata la crearea obiectului cu informatiile selectate.
+
+        Returns:
+
+            'Mesaj expediat cu succes!'
+             sau
+            'Mesajul nu a putut fi expediat!' - daca apare o eroare
+        """
+        import smtplib
+        from email.message import EmailMessage
+        while True:
+            subject = input("""
+Introduceti numarul aferent informatiilor pe care doriti sa le transmiteti:
+-----------------------------
+1.\tFisa produsului
+2.\tData ultimei intrari
+3.\tData ultimei iesiri
+4.\tPret iesire
+5.\tSoldul
+6.\tLista produselor
+7.\tDictionarul categoriilor
+-----------------------------
+
+""")
+
+            if subject == "1":
+                subject = "Fisa produsului {}".format(self.denp)
+
+            if subject == "2":
+                subject = "Data ultimei intrari pentru produsul {}".format(self.denp)
+
+            if subject == "3":
+                subject = "Data ultimei iesiri pentru produsul {}".format(self.denp)
+
+            if subject == "4":
+                subject = "Pret iesire pentru produsul {}".format(self.pret_iesire)
+
+            if subject == "5":
+                subject = "Soldul produsului {}".format(self.sold)
+
+            if subject == "6":
+                subject = "Lista produselor"
+
+            if subject == "7":
+                subject = "Dictionarul categoriilor"
+
+            if subject == "Fisa produsului {}".format(self.denp):
+                body = self.fisap()
+                break
+
+            ult_intr = 0
+            for miscare in self.miscari:
+                if self.miscari[miscare][2] == 0 and self.miscari[miscare][2] > ult_intr:
+                    ult_intr = self.miscari[miscare][2]
+
+            if subject == "Data ultimei intrari pentru produsul {}".format(self.denp):
+                body = "Data ultimei intrari pentru produsul {} este: {}".format(self.denp, ult_intr)
+                break
+
+            ult_ie = 0
+            for miscare in self.miscari:
+                if self.miscari[miscare][2] == 0 and self.miscari[miscare][2] > ult_ie:
+                    ult_ie = self.miscari[miscare][2]
+
+            if subject == "Data ultimei iesiri pentru produsul {}".format(self.denp):
+                body = "Data ultimei iesiri pentru produsul {} este: {}".format(self.denp, ult_ie)
+                break
+
+            if subject == "Pret iesire pentru produsul {}".format(self.pret_iesire):
+                body = "Pret iesire pentru produsul {} este: {}".format(self.denp, self.pret_iesire)
+                break
+
+            if subject == "Soldul produsului {}".format(self.sold):
+                body = "Soldul produsului {} este: {}".format(self.denp, self.sold)
+                break
+
+            if subject == "Lista produselor":
+                body = "Lista produselor este: \n"
+                for i, j in enumerate(self.lista_produse):
+                    body += "\n" + str(i) + " " + str(j)
+                break
+
+            if subject == "Dictionarul categoriilor":
+                body = "Dictionarul categoriilor este: \n:"
+                for i, j in self.dictionar_categorii.items():
+                    body += "\n" + str(i) + " " + str(j)
+                break
+            print(self.dictionar_categorii.items)
+        mesaj = EmailMessage()
+        mesaj.set_content("""\
+From: %s
+To: %s
+Subject: %s
+
+%s
+""" % (self.expeditor, self.destinatar, subject, body))
+
+        mesaj['Subject'] = subject
+        mesaj['From'] = self.expeditor
+        mesaj['To'] = self.destinatar
+
+        try:
+            server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
+            server.ehlo()
+            server.login(self.expeditor, self.parola)
+            server.send_message(mesaj)
+            server.quit()
+            print("Mesaj expediat cu succes!")
+        except:
+            print("Mesajul nu a putut fi expediat!")
+
+
+def ver_prod():
+    """
+    Aceasta functie permite utilizatorului sa verifice existenta unui produs pe stoc.
+
+    Returns:
+        Mesaj de confirmare.
+    """
+
+    produs_cautat = input("Introduceti numele produsului pe care il cautati:")
+    matches = 0
+    pattern = r"\b(?=\w)" + re.escape(produs_cautat) + r"\b(?!\w)"
+    for produs in Stoc.lista_produse:
+        result = re.match(pattern, produs, re.I)
+        if result is not None:
+            matches += 1
+    if matches > 0:
+        print("Produsul cautat \"{}\", se regaseste pe stoc.".format(produs_cautat))
+    else:
+        print("Produsul cautat \"{}\", nu se regaseste pe stoc".format(produs_cautat))
+
+
+ver_prod()
+alune = Stoc("alune", "nuci", um="kg", lim_min=5)
+alune.intrari(42, 10)
+alune.iesiri(6)
+alune.iesiri(6)
+alune.iesiri(6)
+
+prune = Stoc("prune", "fructe", um="kg", lim_min=32)
+prune.intrari(512, 12)
+prune.iesiri(42)
+prune.iesiri(47)
+
+prune.graficel("alune")  # de modificat functia - returneaza toate miscarile
+
+# ver_prod()
